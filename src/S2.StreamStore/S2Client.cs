@@ -18,6 +18,9 @@ public sealed class S2Client : IDisposable
 {
     private readonly S2Options _options;
     private readonly S2HttpClient _httpClient;
+    private readonly Lazy<S2Basins> _basins;
+    private readonly Lazy<S2AccessTokens> _accessTokens;
+    private readonly Lazy<S2Metrics> _metrics;
     private bool _disposed;
 
     /// <summary>
@@ -30,7 +33,25 @@ public sealed class S2Client : IDisposable
 
         _options = options;
         _httpClient = new S2HttpClient(options);
+        _basins = new Lazy<S2Basins>(() => new S2Basins(_httpClient, _options.GetAccountUrl()));
+        _accessTokens = new Lazy<S2AccessTokens>(() => new S2AccessTokens(_httpClient, _options.GetAccountUrl()));
+        _metrics = new Lazy<S2Metrics>(() => new S2Metrics(_httpClient, _options.GetAccountUrl()));
     }
+
+    /// <summary>
+    /// Account-scoped basin management operations (list, create, delete, reconfigure).
+    /// </summary>
+    public S2Basins Basins => _basins.Value;
+
+    /// <summary>
+    /// Account-scoped access token management (list, issue, revoke).
+    /// </summary>
+    public S2AccessTokens AccessTokens => _accessTokens.Value;
+
+    /// <summary>
+    /// Account and basin level metrics access.
+    /// </summary>
+    public S2Metrics Metrics => _metrics.Value;
 
     /// <summary>
     /// Get a basin reference by name.
@@ -45,21 +66,22 @@ public sealed class S2Client : IDisposable
     /// <summary>
     /// List all basins accessible with the current token.
     /// </summary>
+    [Obsolete("Use s2.Basins.ListAsync() instead")]
     public async Task<IReadOnlyList<BasinInfo>> ListBasinsAsync(CancellationToken ct = default)
     {
-        var url = $"{_options.GetBaseUrl()}/v1/basins";
-        var response = await _httpClient.GetAsync<ListBasinsResponse>(url, ct);
+        var response = await Basins.ListAsync(ct: ct);
         return response.Basins;
     }
 
     /// <summary>
     /// Create a new access token with limited scope.
     /// </summary>
+    [Obsolete("Use s2.AccessTokens.IssueAsync() instead")]
     public async Task<AccessTokenResponse> CreateAccessTokenAsync(
         AccessTokenRequest request,
         CancellationToken ct = default)
     {
-        var url = $"{_options.GetBaseUrl()}/v1/access-tokens";
+        var url = $"{_options.GetAccountUrl()}/access_tokens";
         return await _httpClient.PostAsync<AccessTokenRequest, AccessTokenResponse>(url, request, ct);
     }
 
@@ -68,11 +90,6 @@ public sealed class S2Client : IDisposable
         if (_disposed) return;
         _disposed = true;
         _httpClient.Dispose();
-    }
-
-    private sealed class ListBasinsResponse
-    {
-        public List<BasinInfo> Basins { get; set; } = [];
     }
 }
 

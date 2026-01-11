@@ -37,18 +37,18 @@ internal sealed class S2HttpClient : IDisposable
     {
         var handler = new SocketsHttpHandler
         {
-            EnableMultipleHttp2Connections = true,
-            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-            PooledConnectionIdleTimeout = TimeSpan.FromMinutes(2),
-            KeepAlivePingPolicy = HttpKeepAlivePingPolicy.WithActiveRequests,
-            KeepAlivePingTimeout = TimeSpan.FromSeconds(30),
-            KeepAlivePingDelay = TimeSpan.FromSeconds(60)
+            SslOptions = new System.Net.Security.SslClientAuthenticationOptions
+            {
+                EnabledSslProtocols = System.Security.Authentication.SslProtocols.Tls12 | System.Security.Authentication.SslProtocols.Tls13,
+                // Skip ALPN negotiation issues
+                ApplicationProtocols = null
+            }
         };
-
         return new HttpClient(handler)
         {
-            DefaultRequestVersion = HttpVersion.Version20,
-            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionOrHigher
+            // Force HTTP/1.1 to avoid HTTP/2 ALPN issues
+            DefaultRequestVersion = System.Net.HttpVersion.Version11,
+            DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact
         };
     }
 

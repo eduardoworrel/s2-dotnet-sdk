@@ -3,6 +3,7 @@
     <Project Path="src/S2.StreamStore/S2.StreamStore.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/S2.StreamStore.IntegrationTests/S2.StreamStore.IntegrationTests.csproj" />
     <Project Path="tests/S2.StreamStore.Tests/S2.StreamStore.Tests.csproj" />
   </Folder>
 </Solution>

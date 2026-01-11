@@ -36,35 +36,3 @@ public sealed class Record
     /// </summary>
     public string GetBodyAsString() => System.Text.Encoding.UTF8.GetString(Body);
 }
-
-/// <summary>
-/// Receipt returned after successfully appending a record.
-/// </summary>
-public sealed class AppendReceipt
-{
-    /// <summary>
-    /// Sequence number assigned to the appended record.
-    /// </summary>
-    public required long SequenceNumber { get; init; }
-
-    /// <summary>
-    /// Timestamp when the record was appended.
-    /// </summary>
-    public DateTimeOffset Timestamp { get; init; }
-}
-
-/// <summary>
-/// Batch append response from S2.
-/// </summary>
-public sealed class AppendResponse
-{
-    /// <summary>
-    /// Starting sequence number for the batch.
-    /// </summary>
-    public long StartSequenceNumber { get; set; }
-
-    /// <summary>
-    /// Ending sequence number for the batch (exclusive).
-    /// </summary>
-    public long EndSequenceNumber { get; set; }
-}

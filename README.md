@@ -1,6 +1,6 @@
 # S2 .NET SDK
 
-Official .NET SDK for [S2.dev](https://s2.dev) - the streaming data platform.
+.NET SDK for [S2.dev](https://s2.dev) - the streaming data platform.
 
 [![NuGet](https://img.shields.io/nuget/v/S2.StreamStore.svg)](https://www.nuget.org/packages/S2.StreamStore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -59,6 +59,39 @@ var response = await stream.AppendBatchAsync(new[]
 Console.WriteLine($"Batch appended: {response.StartSequenceNumber} - {response.EndSequenceNumber}");
 ```
 
+### Raw Records with Fencing and Trim
+
+```csharp
+using S2.StreamStore.Models;
+
+// Create raw string record
+var record = AppendRecord.String("Hello, world!");
+
+// Create record with headers
+var recordWithHeaders = AppendRecord.String(
+    body: "event data",
+    headers: [("event-type", "user-created"), ("version", "1")]
+);
+
+// Set a fencing token (subsequent appends must provide this token)
+await stream.SetFenceAsync("my-fence-token");
+
+// Append with fencing token
+await stream.AppendRecordAsync(
+    AppendRecord.String("protected data"),
+    fencingToken: "my-fence-token"
+);
+
+// Trim records before sequence number (marks for deletion)
+await stream.TrimAsync(seqNum: 1000);
+
+// Optimistic concurrency with matchSeqNum
+await stream.AppendRecordsAsync(
+    records: [AppendRecord.String("data")],
+    matchSeqNum: 1234  // Fails if current seq != 1234
+);
+```
+
 ### High-Throughput Append Session
 
 For maximum throughput, use `AppendSession` with automatic batching and pipelining:
@@ -81,6 +114,35 @@ for (int i = 0; i < 100_000; i++)
 await session.FlushAsync();
 
 Console.WriteLine($"Sent {session.TotalSent} records");
+```
+
+### Producer with Per-Record Acknowledgments
+
+For precise control over durability acknowledgments:
+
+```csharp
+await using var producer = new Producer(stream, new ProducerOptions
+{
+    LingerDuration = TimeSpan.FromMilliseconds(5),
+    MaxBatchRecords = 100,
+    FencingToken = "my-token"
+});
+
+// Submit returns immediately when record is accepted
+var ticket = await producer.SubmitAsync(AppendRecord.String("important data"));
+
+// Wait for durability confirmation
+var ack = await ticket.AckAsync();
+Console.WriteLine($"Record durable at sequence: {ack.SeqNum}");
+
+await producer.CloseAsync();
+```
+
+### Check Tail Position
+
+```csharp
+var tail = await stream.CheckTailAsync();
+Console.WriteLine($"Next seq: {tail.Tail?.SeqNum}, Timestamp: {tail.Tail?.TimestampDate}");
 ```
 
 ### Read Records
@@ -110,80 +172,99 @@ await foreach (var record in stream.ReadAsync(new ReadSessionOptions
 {
     // ...
 }
-
-// Read limited number of records
-await foreach (var record in stream.ReadAsync(new ReadSessionOptions
-{
-    Start = ReadStart.FromTail(100),
-    MaxRecords = 100
-}))
-{
-    // ...
-}
 ```
 
-### Read Session with Manual Control
+### Basin Management
 
 ```csharp
-var session = stream.OpenReadSession(new ReadSessionOptions
+// List all basins
+var basinsResponse = await s2.Basins.ListAsync();
+foreach (var b in basinsResponse.Basins)
 {
-    Start = ReadStart.FromTail(1)
+    Console.WriteLine($"Basin: {b.Name}, State: {b.State}");
+}
+
+// Create a basin
+await s2.Basins.CreateAsync(new CreateBasinInput
+{
+    Basin = "new-basin",
+    Config = new BasinConfig { CreateStreamOnAppend = true }
 });
 
-try
+// Get basin config
+var config = await s2.Basins.GetConfigAsync("my-basin");
+
+// Delete basin
+await s2.Basins.DeleteAsync("old-basin");
+```
+
+### Stream Management
+
+```csharp
+// List streams in a basin
+var streamsResponse = await basin.Streams.ListAsync(prefix: "game-");
+foreach (var s in streamsResponse.Streams)
 {
-    await foreach (var record in session.ReadAllAsync(cancellationToken))
+    Console.WriteLine($"Stream: {s.Name}");
+}
+
+// Get stream config
+var streamConfig = await basin.Streams.GetConfigAsync("my-stream");
+
+// Reconfigure stream
+await basin.Streams.ReconfigureAsync("my-stream", new StreamConfig
+{
+    StorageClass = "standard"
+});
+```
+
+### Access Tokens
+
+```csharp
+// List access tokens
+var tokensResponse = await s2.AccessTokens.ListAsync();
+
+// Issue a scoped token
+var response = await s2.AccessTokens.IssueAsync(new IssueAccessTokenInput
+{
+    Id = "client-token-1",
+    Scope = new AccessTokenScope
     {
-        // Process record
-        if (shouldStop)
-        {
-            session.Cancel();
-            break;
-        }
-    }
-}
-finally
-{
-    await session.DisposeAsync();
-}
-```
-
-### Access Tokens (Scoped)
-
-Create limited-scope tokens for clients:
-
-```csharp
-var token = await s2.CreateAccessTokenAsync(new AccessTokenRequest
-{
-    Basins = new ScopeFilter { Exact = "my-basin" },
-    Streams = new ScopeFilter { Prefix = "user-" },
-    Operations = ["read"],
-    ExpiresAt = DateTime.UtcNow.AddHours(24)
+        Basins = new ResourceSet { Exact = "my-basin" },
+        Streams = new ResourceSet { Prefix = "user-" },
+        Ops = ["read", "append"]
+    },
+    ExpiresAt = DateTime.UtcNow.AddHours(24).ToString("o")
 });
+Console.WriteLine($"Token: {response.AccessToken}");
 
-// Give this token to frontend/clients
-Console.WriteLine($"Client token: {token.AccessToken}");
+// Revoke a token
+await s2.AccessTokens.RevokeAsync("client-token-1");
 ```
 
-### Basin and Stream Management
+### Metrics
 
 ```csharp
-// List basins
-var basins = await s2.ListBasinsAsync();
+// Account-level metrics
+var accountMetrics = await s2.Metrics.GetAccountMetricsAsync(
+    metricSet: "usage",
+    start: DateTimeOffset.UtcNow.AddDays(-7),
+    end: DateTimeOffset.UtcNow,
+    interval: "day"
+);
 
-// Create basin
-var basin = s2.Basin("new-basin");
-await basin.CreateAsync();
+// Basin-level metrics
+var basinMetrics = await s2.Metrics.GetBasinMetricsAsync(
+    basinName: "my-basin",
+    metricSet: "info"
+);
 
-// List streams in basin
-var streams = await basin.ListStreamsAsync();
-
-// Get stream info
-var info = await stream.GetInfoAsync();
-Console.WriteLine($"Records: {info.RecordCount}, Size: {info.TotalSizeBytes} bytes");
-
-// Delete stream
-await stream.DeleteAsync();
+// Stream-level metrics
+var streamMetrics = await s2.Metrics.GetStreamMetricsAsync(
+    basinName: "my-basin",
+    streamName: "my-stream",
+    metricSet: "usage"
+);
 ```
 
 ## Dependency Injection
@@ -207,32 +288,6 @@ public class GameService(S2Client s2)
 }
 ```
 
-## Error Handling
-
-```csharp
-try
-{
-    await stream.AppendAsync(data);
-}
-catch (StreamNotFoundException ex)
-{
-    Console.WriteLine($"Stream not found: {ex.StreamName}");
-}
-catch (RateLimitedException ex)
-{
-    Console.WriteLine($"Rate limited. Retry after: {ex.RetryAfter}");
-    await Task.Delay(ex.RetryAfter ?? TimeSpan.FromSeconds(1));
-}
-catch (AuthenticationException)
-{
-    Console.WriteLine("Invalid or expired token");
-}
-catch (S2Exception ex)
-{
-    Console.WriteLine($"S2 error: {ex.Message} (HTTP {ex.StatusCode})");
-}
-```
-
 ## Configuration Options
 
 ```csharp
@@ -248,7 +303,7 @@ var s2 = new S2Client(new S2Options
 
 ## Requirements
 
-- .NET 8.0 or later
+- .NET 10.0 or later
 - S2 account and access token from [s2.dev](https://s2.dev)
 
 ## Links
@@ -260,7 +315,3 @@ var s2 = new S2Client(new S2Options
 ## License
 
 MIT License - see [LICENSE](LICENSE) for details.
-
-## Contributing
-
-Contributions welcome! Please read our contributing guidelines before submitting PRs.

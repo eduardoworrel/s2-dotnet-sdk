@@ -56,6 +56,15 @@ public sealed class Stream
     }
 
     /// <summary>
+    /// Check the tail position of the stream.
+    /// Returns the next sequence number and timestamp to be assigned.
+    /// </summary>
+    public async Task<TailResponse> CheckTailAsync(CancellationToken ct = default)
+    {
+        return await _httpClient.GetAsync<TailResponse>($"{RecordsUrl}/tail", ct);
+    }
+
+    /// <summary>
     /// Create this stream if it doesn't exist.
     /// </summary>
     /// <returns>True if created, false if already existed.</returns>
@@ -118,6 +127,76 @@ public sealed class Stream
         };
 
         return await _httpClient.PostAsync<AppendRequest, AppendResponse>(RecordsUrl, request, ct);
+    }
+
+    /// <summary>
+    /// Append a single raw record to the stream.
+    /// Use AppendRecord.String(), AppendRecord.Bytes(), AppendRecord.Fence(), or AppendRecord.Trim() to create records.
+    /// </summary>
+    /// <param name="record">The record to append.</param>
+    /// <param name="fencingToken">Optional fencing token to enforce.</param>
+    /// <param name="matchSeqNum">Optional sequence number to match for optimistic concurrency.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<AppendAck> AppendRecordAsync(
+        AppendRecord record,
+        string? fencingToken = null,
+        long? matchSeqNum = null,
+        CancellationToken ct = default)
+    {
+        var input = new AppendInput
+        {
+            Records = [record],
+            FencingToken = fencingToken,
+            MatchSeqNum = matchSeqNum
+        };
+
+        return await _httpClient.PostAsync<AppendInput, AppendAck>(RecordsUrl, input, ct);
+    }
+
+    /// <summary>
+    /// Append multiple raw records to the stream with optional fencing and concurrency control.
+    /// Use AppendRecord.String(), AppendRecord.Bytes(), AppendRecord.Fence(), or AppendRecord.Trim() to create records.
+    /// </summary>
+    /// <param name="records">The records to append.</param>
+    /// <param name="fencingToken">Optional fencing token to enforce.</param>
+    /// <param name="matchSeqNum">Optional sequence number to match for optimistic concurrency.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<AppendAck> AppendRecordsAsync(
+        IEnumerable<AppendRecord> records,
+        string? fencingToken = null,
+        long? matchSeqNum = null,
+        CancellationToken ct = default)
+    {
+        var input = new AppendInput
+        {
+            Records = records.ToList(),
+            FencingToken = fencingToken,
+            MatchSeqNum = matchSeqNum
+        };
+
+        return await _httpClient.PostAsync<AppendInput, AppendAck>(RecordsUrl, input, ct);
+    }
+
+    /// <summary>
+    /// Set a fencing token on the stream.
+    /// Subsequent appends must provide this token to succeed.
+    /// </summary>
+    /// <param name="fencingToken">The fencing token to set.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<AppendAck> SetFenceAsync(string fencingToken, CancellationToken ct = default)
+    {
+        return await AppendRecordAsync(AppendRecord.Fence(fencingToken), ct: ct);
+    }
+
+    /// <summary>
+    /// Trim the stream, marking all records before the specified sequence number for deletion.
+    /// </summary>
+    /// <param name="seqNum">The sequence number to trim to (records before this will be deleted).</param>
+    /// <param name="fencingToken">Optional fencing token to enforce.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<AppendAck> TrimAsync(long seqNum, string? fencingToken = null, CancellationToken ct = default)
+    {
+        return await AppendRecordAsync(AppendRecord.Trim(seqNum), fencingToken, ct: ct);
     }
 
     /// <summary>

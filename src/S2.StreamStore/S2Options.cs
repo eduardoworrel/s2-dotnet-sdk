@@ -42,6 +42,8 @@ public sealed class S2Options
         _ => throw new ArgumentOutOfRangeException(nameof(Region))
     };
 
+    internal string GetAccountUrl() => $"{GetBaseUrl()}/v1";
+
     internal string GetBasinUrl(string basin) => $"https://{basin}.b.aws.s2.dev";
 }
 

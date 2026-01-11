@@ -49,3 +49,9 @@ Thumbs.db
 # Misc
 *.log
 *.tmp
+
+# Reference SDK (cloned for development)
+reference-sdk/
+
+# Publish artifacts
+publish/
