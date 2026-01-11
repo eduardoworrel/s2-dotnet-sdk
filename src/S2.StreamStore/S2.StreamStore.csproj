@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- Package Info -->
+    <PackageId>S2.StreamStore</PackageId>
+    <Version>0.1.0-alpha</Version>
+    <Authors>S2 Community</Authors>
+    <Company>S2.dev</Company>
+    <Description>Official .NET SDK for S2.dev - the streaming data platform. Supports reading and writing records with high-throughput batching and pipelining.</Description>
+    <PackageTags>s2;streaming;real-time;data;events;pubsub</PackageTags>
+    <PackageProjectUrl>https://github.com/s2-streamstore/s2-dotnet</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/s2-streamstore/s2-dotnet</RepositoryUrl>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- Build Settings -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <!-- Trimming/AOT Support -->
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

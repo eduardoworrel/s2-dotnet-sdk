@@ -1,0 +1,160 @@
+using System.Text;
+using System.Text.Json;
+using S2.StreamStore.Http;
+using S2.StreamStore.Models;
+using S2.StreamStore.Sessions;
+
+namespace S2.StreamStore;
+
+/// <summary>
+/// Represents an S2 stream for reading and writing records.
+/// </summary>
+public sealed class Stream
+{
+    private readonly string _name;
+    private readonly Basin _basin;
+    private readonly S2HttpClient _httpClient;
+    private readonly JsonSerializerOptions _jsonOptions;
+
+    internal Stream(string name, Basin basin, S2HttpClient httpClient)
+    {
+        _name = name;
+        _basin = basin;
+        _httpClient = httpClient;
+        _jsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+    }
+
+    /// <summary>
+    /// Stream name.
+    /// </summary>
+    public string Name => _name;
+
+    /// <summary>
+    /// Parent basin.
+    /// </summary>
+    public Basin Basin => _basin;
+
+    /// <summary>
+    /// Full URL for this stream's records endpoint.
+    /// </summary>
+    internal string RecordsUrl => $"{_basin.BaseUrl}/v1/streams/{_name}/records";
+
+    /// <summary>
+    /// Full URL for this stream.
+    /// </summary>
+    internal string StreamUrl => $"{_basin.BaseUrl}/v1/streams/{_name}";
+
+    /// <summary>
+    /// Get information about this stream.
+    /// </summary>
+    public async Task<StreamInfo> GetInfoAsync(CancellationToken ct = default)
+    {
+        return await _httpClient.GetAsync<StreamInfo>(StreamUrl, ct);
+    }
+
+    /// <summary>
+    /// Create this stream if it doesn't exist.
+    /// </summary>
+    /// <returns>True if created, false if already existed.</returns>
+    public async Task<bool> CreateAsync(CancellationToken ct = default)
+    {
+        return await _httpClient.PutAsync(StreamUrl, ct);
+    }
+
+    /// <summary>
+    /// Delete this stream and all its records.
+    /// </summary>
+    public async Task DeleteAsync(CancellationToken ct = default)
+    {
+        await _httpClient.DeleteAsync(StreamUrl, ct);
+    }
+
+    /// <summary>
+    /// Append a single record to the stream.
+    /// </summary>
+    /// <typeparam name="T">Type of the data to serialize.</typeparam>
+    /// <param name="data">Data to append.</param>
+    /// <param name="ct">Cancellation token.</param>
+    /// <returns>Receipt with sequence number.</returns>
+    public async Task<AppendReceipt> AppendAsync<T>(T data, CancellationToken ct = default)
+    {
+        var json = JsonSerializer.Serialize(data, _jsonOptions);
+        var base64Body = Convert.ToBase64String(Encoding.UTF8.GetBytes(json));
+
+        var request = new AppendRequest
+        {
+            Records = [new AppendRequestRecord { Body = base64Body }]
+        };
+
+        var response = await _httpClient.PostAsync<AppendRequest, AppendResponse>(RecordsUrl, request, ct);
+
+        return new AppendReceipt
+        {
+            SequenceNumber = response.StartSequenceNumber,
+            Timestamp = DateTimeOffset.UtcNow
+        };
+    }
+
+    /// <summary>
+    /// Append multiple records to the stream in a single batch.
+    /// </summary>
+    public async Task<AppendResponse> AppendBatchAsync<T>(
+        IEnumerable<T> records,
+        CancellationToken ct = default)
+    {
+        var request = new AppendRequest
+        {
+            Records = records.Select(r =>
+            {
+                var json = JsonSerializer.Serialize(r, _jsonOptions);
+                return new AppendRequestRecord
+                {
+                    Body = Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+                };
+            }).ToList()
+        };
+
+        return await _httpClient.PostAsync<AppendRequest, AppendResponse>(RecordsUrl, request, ct);
+    }
+
+    /// <summary>
+    /// Open a read session to consume records from the stream.
+    /// </summary>
+    public ReadSession OpenReadSession(ReadSessionOptions? options = null)
+    {
+        return new ReadSession(this, _httpClient.GetHttpClient(), options ?? new ReadSessionOptions());
+    }
+
+    /// <summary>
+    /// Open an append session for high-throughput writes with batching.
+    /// </summary>
+    public AppendSession OpenAppendSession(AppendSessionOptions? options = null)
+    {
+        return new AppendSession(this, _httpClient.GetHttpClient(), options ?? new AppendSessionOptions());
+    }
+
+    /// <summary>
+    /// Read records from the stream as an async enumerable.
+    /// Convenience method that creates a ReadSession internally.
+    /// </summary>
+    public IAsyncEnumerable<Record> ReadAsync(
+        ReadSessionOptions? options = null,
+        CancellationToken ct = default)
+    {
+        var session = OpenReadSession(options);
+        return session.ReadAllAsync(ct);
+    }
+
+    private sealed class AppendRequest
+    {
+        public List<AppendRequestRecord> Records { get; set; } = [];
+    }
+
+    private sealed class AppendRequestRecord
+    {
+        public required string Body { get; set; }
+    }
+}

@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/S2.StreamStore/S2.StreamStore.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/S2.StreamStore.Tests/S2.StreamStore.Tests.csproj" />
+  </Folder>
+</Solution>
