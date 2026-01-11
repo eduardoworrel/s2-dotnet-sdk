@@ -36,6 +36,13 @@ public sealed class S2Options
     /// </summary>
     public Func<HttpClient>? HttpClientFactory { get; set; }
 
+    /// <summary>
+    /// Pre-configured HttpClient instance to use.
+    /// Useful for Blazor WASM where HttpClient is injected via DI.
+    /// The client will NOT be disposed by S2Client.
+    /// </summary>
+    public HttpClient? HttpClient { get; set; }
+
     internal string GetBaseUrl() => Region switch
     {
         S2Region.AWS => "https://aws.s2.dev",

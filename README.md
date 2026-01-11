@@ -288,6 +288,45 @@ public class GameService(S2Client s2)
 }
 ```
 
+## Blazor WebAssembly
+
+The SDK is compatible with Blazor WASM. Pass the injected `HttpClient`:
+
+```csharp
+// Program.cs
+builder.Services.AddScoped(sp => new S2Client(new S2Options
+{
+    AccessToken = "s2_...",
+    HttpClient = sp.GetRequiredService<HttpClient>()  // Use Blazor's HttpClient
+}));
+```
+
+```razor
+@* In your component *@
+@inject S2Client S2
+
+@code {
+    private List<string> messages = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var stream = S2.Basin("my-basin").Stream("chat");
+
+        await foreach (var record in stream.ReadAsync())
+        {
+            messages.Add(record.GetBodyAsString());
+            StateHasChanged();
+        }
+    }
+
+    private async Task SendMessage(string text)
+    {
+        var stream = S2.Basin("my-basin").Stream("chat");
+        await stream.AppendAsync(new { text, timestamp = DateTime.UtcNow });
+    }
+}
+```
+
 ## Configuration Options
 
 ```csharp

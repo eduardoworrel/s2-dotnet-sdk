@@ -1,14 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
 
     <!-- Package Info -->
     <PackageId>S2.StreamStore</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Authors>eduardoworrel</Authors>
     <Company>eduardoworrel</Company>
     <Description>.NET SDK for S2.dev - the streaming data platform. Supports reading and writing records with high-throughput batching, sessions, fencing, trim, and metrics.</Description>

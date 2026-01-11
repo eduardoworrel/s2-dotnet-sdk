@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using S2.StreamStore.Exceptions;
@@ -15,16 +16,42 @@ internal sealed class S2HttpClient : IDisposable
     private readonly HttpClient _client;
     private readonly S2Options _options;
     private readonly JsonSerializerOptions _jsonOptions;
+    private readonly bool _ownsClient;
     private bool _disposed;
+
+    /// <summary>
+    /// Check if running in browser (Blazor WASM).
+    /// </summary>
+    public static bool IsBrowser => RuntimeInformation.IsOSPlatform(OSPlatform.Create("BROWSER"));
 
     public S2HttpClient(S2Options options)
     {
         _options = options;
 
-        _client = options.HttpClientFactory?.Invoke() ?? CreateDefaultClient();
+        if (options.HttpClient != null)
+        {
+            // Use provided HttpClient (for Blazor DI scenarios)
+            _client = options.HttpClient;
+            _ownsClient = false;
+        }
+        else if (options.HttpClientFactory != null)
+        {
+            _client = options.HttpClientFactory();
+            _ownsClient = true;
+        }
+        else
+        {
+            _client = CreateDefaultClient();
+            _ownsClient = true;
+        }
+
         _client.DefaultRequestHeaders.Authorization =
             new AuthenticationHeaderValue("Bearer", options.AccessToken);
-        _client.Timeout = options.Timeout;
+
+        if (_ownsClient)
+        {
+            _client.Timeout = options.Timeout;
+        }
 
         _jsonOptions = new JsonSerializerOptions
         {
@@ -35,6 +62,13 @@ internal sealed class S2HttpClient : IDisposable
 
     private static HttpClient CreateDefaultClient()
     {
+        // In browser (Blazor WASM), use simple HttpClient - browser handles TLS
+        if (IsBrowser)
+        {
+            return new HttpClient();
+        }
+
+        // Server-side: use SocketsHttpHandler with TLS configuration
         var handler = new SocketsHttpHandler
         {
             SslOptions = new System.Net.Security.SslClientAuthenticationOptions
@@ -46,7 +80,7 @@ internal sealed class S2HttpClient : IDisposable
         };
         return new HttpClient(handler)
         {
-            // Force HTTP/1.1 to avoid HTTP/2 ALPN issues
+            // Force HTTP/1.1 to avoid HTTP/2 ALPN issues on some servers
             DefaultRequestVersion = System.Net.HttpVersion.Version11,
             DefaultVersionPolicy = HttpVersionPolicy.RequestVersionExact
         };
@@ -200,6 +234,11 @@ internal sealed class S2HttpClient : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _client.Dispose();
+
+        // Only dispose if we own the client
+        if (_ownsClient)
+        {
+            _client.Dispose();
+        }
     }
 }

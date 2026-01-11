@@ -1,0 +1,66 @@
+﻿@page "/"
+@using S2.StreamStore
+@using S2.StreamStore.Models
+@inject S2Client S2
+
+<PageTitle>S2 SDK Blazor Test</PageTitle>
+
+<h1>S2 .NET SDK - Blazor WASM Test</h1>
+
+<div>
+    <h3>SDK Status</h3>
+    <p>S2Client injected: @(S2 != null ? "Yes" : "No")</p>
+    <p>Basin reference: @basinStatus</p>
+    <p>Stream reference: @streamStatus</p>
+    <p>AppendRecord.String test: @appendRecordStatus</p>
+    <p>AppendRecord.Fence test: @fenceRecordStatus</p>
+    <p>AppendRecord.Trim test: @trimRecordStatus</p>
+</div>
+
+<div style="margin-top: 20px;">
+    <h3>Test Results</h3>
+    <pre style="background: #f0f0f0; padding: 10px;">@testOutput</pre>
+</div>
+
+@code {
+    private string basinStatus = "Not tested";
+    private string streamStatus = "Not tested";
+    private string appendRecordStatus = "Not tested";
+    private string fenceRecordStatus = "Not tested";
+    private string trimRecordStatus = "Not tested";
+    private string testOutput = "";
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            // Test basin reference
+            var basin = S2.Basin("test-basin");
+            basinStatus = basin != null ? $"OK - {basin.Name}" : "Failed";
+
+            // Test stream reference
+            var stream = basin.Stream("test-stream");
+            streamStatus = stream != null ? $"OK - {stream.Name}" : "Failed";
+
+            // Test AppendRecord.String
+            var stringRecord = AppendRecord.String("Hello, Blazor!");
+            appendRecordStatus = stringRecord != null ? $"OK - Body: {stringRecord.Body}" : "Failed";
+
+            // Test AppendRecord.Fence
+            var fenceRecord = AppendRecord.Fence("my-fence-token");
+            fenceRecordStatus = fenceRecord != null && fenceRecord.Headers?.Count > 0
+                ? $"OK - Headers: {fenceRecord.Headers.Count}"
+                : "Failed";
+
+            // Test AppendRecord.Trim
+            var trimRecord = AppendRecord.Trim(1000);
+            trimRecordStatus = trimRecord != null ? $"OK - Body length: {trimRecord.Body.Length}" : "Failed";
+
+            testOutput = "All SDK components loaded successfully in Blazor WASM!";
+        }
+        catch (Exception ex)
+        {
+            testOutput = $"Error: {ex.Message}\n\nStack trace:\n{ex.StackTrace}";
+        }
+    }
+}
