@@ -227,6 +227,40 @@ public sealed class Stream
         return session.ReadAllAsync(ct);
     }
 
+    /// <summary>
+    /// Read records from the stream as strings.
+    /// Bodies and headers are decoded as UTF-8 strings.
+    /// </summary>
+    public async IAsyncEnumerable<StringRecord> ReadStringsAsync(
+        ReadSessionOptions? options = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        options ??= new ReadSessionOptions();
+        options.Format = ReadFormat.String;
+        var session = OpenReadSession(options);
+        await foreach (var record in session.ReadAllAsync(ct))
+        {
+            yield return StringRecord.FromRecord(record);
+        }
+    }
+
+    /// <summary>
+    /// Read records from the stream as bytes.
+    /// Bodies and headers are kept as binary.
+    /// </summary>
+    public async IAsyncEnumerable<BytesRecord> ReadBytesAsync(
+        ReadSessionOptions? options = null,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+    {
+        options ??= new ReadSessionOptions();
+        options.Format = ReadFormat.Bytes;
+        var session = OpenReadSession(options);
+        await foreach (var record in session.ReadAllAsync(ct))
+        {
+            yield return BytesRecord.FromRecord(record);
+        }
+    }
+
     private sealed class AppendRequest
     {
         public List<AppendRequestRecord> Records { get; set; } = [];

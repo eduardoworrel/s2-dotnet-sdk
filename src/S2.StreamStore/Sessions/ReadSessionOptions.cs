@@ -1,3 +1,5 @@
+using S2.StreamStore.Models;
+
 namespace S2.StreamStore.Sessions;
 
 /// <summary>
@@ -20,6 +22,36 @@ public sealed class ReadSessionOptions
     /// Timeout for individual read operations.
     /// </summary>
     public TimeSpan ReadTimeout { get; set; } = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Start from tail if requested position is beyond it.
+    /// When true, prevents RangeNotSatisfiableException by clamping to the tail.
+    /// </summary>
+    public bool Clamp { get; set; } = false;
+
+    /// <summary>
+    /// Format for reading records.
+    /// Determines how body and headers are decoded.
+    /// Default: Bytes (raw binary)
+    /// </summary>
+    public ReadFormat Format { get; set; } = ReadFormat.Bytes;
+
+    /// <summary>
+    /// Whether to skip command records (fence, trim) when reading.
+    /// Default: false (include all records)
+    /// </summary>
+    public bool IgnoreCommandRecords { get; set; } = false;
+
+    /// <summary>
+    /// Duration in seconds to wait for new records before stopping.
+    /// Only applicable for non-streaming reads.
+    /// </summary>
+    public int? WaitSecs { get; set; }
+
+    /// <summary>
+    /// Timestamp at which to stop reading (exclusive).
+    /// </summary>
+    public DateTimeOffset? UntilTimestamp { get; set; }
 }
 
 /// <summary>

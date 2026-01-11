@@ -1,6 +1,8 @@
 ﻿@page "/"
 @using S2.StreamStore
 @using S2.StreamStore.Models
+@using S2.StreamStore.Exceptions
+@using S2.StreamStore.Sessions
 @inject S2Client S2
 
 <PageTitle>S2 SDK Blazor Test</PageTitle>
@@ -18,6 +20,16 @@
 </div>
 
 <div style="margin-top: 20px;">
+    <h3>New Features Tests</h3>
+    <p>RetryConfig test: @retryConfigStatus</p>
+    <p>S2RequestOptions test: @requestOptionsStatus</p>
+    <p>S2Environment test: @environmentStatus</p>
+    <p>Error types test: @errorTypesStatus</p>
+    <p>ReadFormat test: @readFormatStatus</p>
+    <p>ReadSessionOptions test: @readSessionOptionsStatus</p>
+</div>
+
+<div style="margin-top: 20px;">
     <h3>Test Results</h3>
     <pre style="background: #f0f0f0; padding: 10px;">@testOutput</pre>
 </div>
@@ -28,6 +40,12 @@
     private string appendRecordStatus = "Not tested";
     private string fenceRecordStatus = "Not tested";
     private string trimRecordStatus = "Not tested";
+    private string retryConfigStatus = "Not tested";
+    private string requestOptionsStatus = "Not tested";
+    private string environmentStatus = "Not tested";
+    private string errorTypesStatus = "Not tested";
+    private string readFormatStatus = "Not tested";
+    private string readSessionOptionsStatus = "Not tested";
     private string testOutput = "";
 
     protected override void OnInitialized()
@@ -55,6 +73,78 @@
             // Test AppendRecord.Trim
             var trimRecord = AppendRecord.Trim(1000);
             trimRecordStatus = trimRecord != null ? $"OK - Body length: {trimRecord.Body.Length}" : "Failed";
+
+            // Test RetryConfig
+            var retryConfig = new RetryConfig
+            {
+                MaxAttempts = 5,
+                MinDelay = TimeSpan.FromMilliseconds(200),
+                MaxDelay = TimeSpan.FromSeconds(2),
+                AppendRetryPolicy = AppendRetryPolicy.NoSideEffects,
+                RequestTimeout = TimeSpan.FromSeconds(10),
+                ConnectionTimeout = TimeSpan.FromSeconds(5)
+            };
+            retryConfigStatus = retryConfig.MaxAttempts == 5 &&
+                retryConfig.AppendRetryPolicy == AppendRetryPolicy.NoSideEffects
+                ? $"OK - MaxAttempts: {retryConfig.MaxAttempts}, Policy: {retryConfig.AppendRetryPolicy}"
+                : "Failed";
+
+            // Test S2RequestOptions
+            using var cts = new CancellationTokenSource();
+            var requestOptions = S2RequestOptions.WithCancellation(cts.Token);
+            requestOptionsStatus = requestOptions != null
+                ? $"OK - CancellationToken: {requestOptions.CancellationToken.CanBeCanceled}"
+                : "Failed";
+
+            // Test S2Environment (parse from env vars - won't have values in browser but should not throw)
+            try
+            {
+                var envConfig = S2Environment.Parse();
+                environmentStatus = $"OK - AccessToken: {(string.IsNullOrEmpty(envConfig.AccessToken) ? "null" : "set")}";
+            }
+            catch (Exception ex)
+            {
+                environmentStatus = $"Failed - {ex.Message}";
+            }
+
+            // Test error types
+            try
+            {
+                var seqNumError = new SeqNumMismatchException(100);
+                var fencingError = new FencingTokenMismatchException("token123");
+                var rangeError = new RangeNotSatisfiableException(50, 1000);
+
+                errorTypesStatus = seqNumError.ExpectedSeqNum == 100 &&
+                    fencingError.ExpectedFencingToken == "token123" &&
+                    rangeError.TailSeqNum == 50
+                    ? $"OK - All error types created"
+                    : "Failed";
+            }
+            catch (Exception ex)
+            {
+                errorTypesStatus = $"Failed - {ex.Message}";
+            }
+
+            // Test ReadFormat enum
+            var stringFormat = ReadFormat.String;
+            var bytesFormat = ReadFormat.Bytes;
+            readFormatStatus = stringFormat != bytesFormat
+                ? $"OK - String: {stringFormat}, Bytes: {bytesFormat}"
+                : "Failed";
+
+            // Test ReadSessionOptions with new properties
+            var readOptions = new ReadSessionOptions
+            {
+                Format = ReadFormat.String,
+                Clamp = true,
+                IgnoreCommandRecords = true,
+                WaitSecs = 5
+            };
+            readSessionOptionsStatus = readOptions.Format == ReadFormat.String &&
+                readOptions.Clamp == true &&
+                readOptions.IgnoreCommandRecords == true
+                ? $"OK - Format: {readOptions.Format}, Clamp: {readOptions.Clamp}"
+                : "Failed";
 
             testOutput = "All SDK components loaded successfully in Blazor WASM!";
         }

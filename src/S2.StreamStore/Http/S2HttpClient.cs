@@ -178,8 +178,10 @@ internal sealed class S2HttpClient : IDisposable
         Func<Task<T>> operation,
         CancellationToken ct)
     {
+        var retry = _options.Retry;
         var attempt = 0;
-        var delay = _options.RetryBaseDelay;
+        var baseDelay = retry.MinDelay;
+        var random = new Random();
 
         while (true)
         {
@@ -187,28 +189,36 @@ internal sealed class S2HttpClient : IDisposable
             {
                 return await operation();
             }
-            catch (S2Exception ex) when (ShouldRetry(ex) && attempt < _options.MaxRetries)
+            catch (S2Exception ex) when (ShouldRetry(ex) && attempt + 1 < retry.MaxAttempts)
             {
                 attempt++;
+                var delay = CalculateDelayWithJitter(baseDelay, retry.MaxDelay, random);
                 await Task.Delay(delay, ct);
-                delay *= 2; // Exponential backoff
+                baseDelay = TimeSpan.FromTicks(Math.Min(baseDelay.Ticks * 2, retry.MaxDelay.Ticks));
             }
-            catch (HttpRequestException ex) when (attempt < _options.MaxRetries)
+            catch (HttpRequestException) when (attempt + 1 < retry.MaxAttempts)
             {
                 attempt++;
+                var delay = CalculateDelayWithJitter(baseDelay, retry.MaxDelay, random);
                 await Task.Delay(delay, ct);
-                delay *= 2;
+                baseDelay = TimeSpan.FromTicks(Math.Min(baseDelay.Ticks * 2, retry.MaxDelay.Ticks));
             }
         }
     }
 
+    /// <summary>
+    /// Calculate delay with jitter: delay in range [baseDelay, 2*baseDelay)
+    /// </summary>
+    private static TimeSpan CalculateDelayWithJitter(TimeSpan baseDelay, TimeSpan maxDelay, Random random)
+    {
+        var cappedBase = TimeSpan.FromTicks(Math.Min(baseDelay.Ticks, maxDelay.Ticks));
+        var jitterMultiplier = 1 + random.NextDouble(); // 1.0 to 2.0
+        return TimeSpan.FromTicks((long)(cappedBase.Ticks * jitterMultiplier));
+    }
+
     private static bool ShouldRetry(S2Exception ex)
     {
-        return ex.StatusCode is
-            HttpStatusCode.TooManyRequests or
-            HttpStatusCode.ServiceUnavailable or
-            HttpStatusCode.GatewayTimeout or
-            HttpStatusCode.BadGateway;
+        return ex.IsRetryable;
     }
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response)
